@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import UUID
 
 import orjson
+from aiofile import async_open
 from emoji import demojize, purely_emoji
 from loguru import logger
 from sqlalchemy.exc import NoResultFound
@@ -164,8 +165,8 @@ def update_new_output(data):
         if "sourceHandle" in edge and "targetHandle" in edge:
             new_source_handle = scape_json_parse(edge["sourceHandle"])
             new_target_handle = scape_json_parse(edge["targetHandle"])
-            _id = new_source_handle["id"]
-            source_node_index = next((index for (index, d) in enumerate(nodes) if d["id"] == _id), -1)
+            id_ = new_source_handle["id"]
+            source_node_index = next((index for (index, d) in enumerate(nodes) if d["id"] == id_), -1)
             source_node = nodes[source_node_index] if source_node_index != -1 else None
 
             if "baseClasses" in new_source_handle:
@@ -543,15 +544,16 @@ async def load_flows_from_directory() -> None:
             msg = "Superuser not found in the database"
             raise NoResultFound(msg)
         user_id = user.id
-        _flows_path = Path(flows_path)
-        files = [f for f in _flows_path.iterdir() if f.is_file()]
-        for f in files:
-            if f.suffix != ".json":
+        flows_path_ = Path(flows_path)
+        files = [f for f in flows_path_.iterdir() if f.is_file()]
+        for file_path in files:
+            if file_path.suffix != ".json":
                 continue
-            logger.info(f"Loading flow from file: {f.name}")
-            content = f.read_text(encoding="utf-8")
+            logger.info(f"Loading flow from file: {file_path.name}")
+            async with async_open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
             flow = orjson.loads(content)
-            no_json_name = f.stem
+            no_json_name = file_path.stem
             flow_endpoint_name = flow.get("endpoint_name")
             if _is_valid_uuid(no_json_name):
                 flow["id"] = no_json_name
@@ -572,7 +574,7 @@ async def load_flows_from_directory() -> None:
                 # behavior where flows could be added and folder_id was None, orphaning
                 # them within Langflow.
                 if existing.folder_id is None:
-                    folder_id = get_default_folder_id(session, user_id)
+                    folder_id = await get_default_folder_id(session, user_id)
                     existing.folder_id = folder_id
 
                 session.add(existing)
@@ -580,7 +582,7 @@ async def load_flows_from_directory() -> None:
                 logger.info(f"Creating new flow: {flow_id} with endpoint name {flow_endpoint_name}")
 
                 # Current behavior loads all new flows into default folder
-                folder_id = get_default_folder_id(session, user_id)
+                folder_id = await get_default_folder_id(session, user_id)
 
                 flow["user_id"] = user_id
                 flow["folder_id"] = folder_id
