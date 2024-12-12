@@ -27,6 +27,13 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+export function toCamelCase(str: string): string {
+  return str
+    .split(" ")
+    .map((s, index) => (index !== 0 ? toNormalCase(s) : s.toLowerCase()))
+    .join("");
+}
+
 export function toNormalCase(str: string): string {
   let result = str
     .split("_")
@@ -676,3 +683,5 @@ export const isStringArray = (value: unknown): value is string[] => {
     Array.isArray(value) && value.every((item) => typeof item === "string")
   );
 };
+
+export const stringToBool = (str) => (str === "false" ? false : true);
